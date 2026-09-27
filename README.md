@@ -4,6 +4,65 @@ A fast, cross-platform Go CLI to create symbolic links between **Ollama** and **
 
 ---
 
+## 🍴 Fork Notes (thomasbergernz)
+
+This fork is identical to upstream [`qaribhaider/ollama-to-lmstudio-symlinks`](https://github.com/qaribhaider/ollama-to-lmstudio-symlinks) at commit `42cd89e`. It was security-reviewed before use.
+
+### Security review summary
+
+- **No network code** in the Go binary: no HTTP calls, telemetry or self-update.
+- **Commands it runs:** only `ollama rm` (`delete` subcommand) and `ollama create` (`--reverse`). Both are called without a shell, with validated model names.
+- **Deletions:** limited to symlinks or regular files (checked with `Lstat`) and empty LM Studio model directories. Nothing deletes whole folder trees.
+- **Forward mode (Ollama → LM Studio)** only creates symlinks under `<lmstudio>/models/ollama/`. It never writes to `~/.ollama`.
+- **Not used: `install.sh` / `uninstall.sh`.** They pipe `curl | bash`, download from upstream rather than this fork, and use `sudo`. The checksum comes from the same release, so it proves integrity, not authenticity. The macOS binary has only an ad-hoc signature.
+
+### How it is installed here
+
+Built from source and installed to `~/bin`, with no `sudo` and no release binary:
+
+```bash
+git clone https://github.com/thomasbergernz/ollama-to-lmstudio-symlinks.git ~/src/ollama-to-lmstudio-symlinks
+cd ~/src/ollama-to-lmstudio-symlinks
+go build -o ollama-symlinks ./cmd/ollama-symlinks
+mkdir -p ~/bin && mv ollama-symlinks ~/bin/
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc
+```
+
+`--version` reports `dev` because the build omits `-ldflags`. Use `./build.sh` to embed the `VERSION` file instead.
+
+### What is actually used
+
+Only **forward mode** (Ollama → LM Studio), pointed at the current LM Studio models dir. The tool's default is the older `~/.cache/lm-studio/models`, so pass the directory explicitly:
+
+```bash
+# preview, then link all Ollama models into LM Studio
+ollama-symlinks --interactive=false --dry-run --lmstudio-dir ~/.lmstudio/models
+ollama-symlinks --interactive=false --lmstudio-dir ~/.lmstudio/models
+
+# check links / find broken ones
+ollama-symlinks status --lmstudio-dir ~/.lmstudio/models
+```
+
+Links land in `~/.lmstudio/models/ollama/<model>/<model>.gguf` and point to `~/.ollama/models/blobs/sha256-*`. They appear in LM Studio under the **ollama** provider.
+
+**Maintenance:** when Ollama updates or removes a model, its blob is replaced and the LM Studio link breaks. Run `ollama-symlinks cleanup`, then re-run the link command. Deleting a model in LM Studio removes only the link.
+
+**Deliberately not used:**
+- `--reverse`, which writes into `~/.ollama` and registers models.
+- `delete` on the Ollama side, which runs `ollama rm` and removes real models.
+- `--hardlinks`, which is only needed on Windows.
+
+### Updating from upstream
+
+```bash
+cd ~/src/ollama-to-lmstudio-symlinks
+git fetch upstream && git diff HEAD upstream/main   # review before merging
+git merge upstream/main
+go build -o ~/bin/ollama-symlinks ./cmd/ollama-symlinks
+```
+
+---
+
 ## ✨ Features
 
 - 🔄 **Bidirectional Linking**: Link Ollama models to LM Studio OR LM Studio models to Ollama.
